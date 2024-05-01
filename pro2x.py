@@ -111,8 +111,8 @@ strategy_options = {
 selected_strategy = st.sidebar.selectbox('Select Portfolio Strategy', list(strategy_options.keys()))
 
 # Date selection for historical data viewing, limit max date to January 1st, 2024
-max_date = datetime(2024, 1, 1)
-date = st.sidebar.date_input('Select Date', min_value=datetime(2020, 1, 1), max_value=max_date, value=max_date)
+max_date = datetime(year, 1, 1)
+date = datetime(year, 1, 1)
 
 # Data processing based on selection
 def process_data(strategy_func):
@@ -170,3 +170,55 @@ if not weights.empty:
     st.metric("Annualized Volatility", f"{volatility:.2%}")
 
     st.line_chart(cum_returns)  # Plot cumulative returns
+
+def get_data(symbols, start, end):
+    data = yf.download(symbols, start=start, end=end)
+    data.index = pd.to_datetime(data.index)
+    return data['Adj Close']
+
+def rebalance_portfolio(data, initial_investment=100000):
+    monthly_data = data.resample('M').last()
+    quarterly_rebalance = monthly_data.resample('Q').last()
+    num_assets = len(data.columns)
+    monthly_investments = initial_investment / num_assets
+    
+    portfolio = pd.DataFrame(index=monthly_data.index, columns=data.columns)
+    investments = initial_investment  # Initial investments equally divided
+    
+    for date in monthly_data.index:
+        if date in quarterly_rebalance.index:
+            # Reconstitute: Equal investment in each asset
+            investments = (portfolio.loc[date] * monthly_data.loc[date]).sum()
+            monthly_investments = investments / num_assets  # Redistribute investments equally
+        portfolio.loc[date] = monthly_investments / monthly_data.loc[date]
+        investments = (portfolio.loc[date] * monthly_data.loc[date]).sum()
+
+    return portfolio.multiply(monthly_data)
+
+def top_crypto_breakdown(data):
+    quarterly_data = data.resample('Q').last()
+    monthly_data = data.resample('M').last()
+    top_crypto_weights = pd.DataFrame()
+
+    for quarter_end in quarterly_data.index:
+        quarter_top_crypto = data.loc[:quarter_end].iloc[-1].nlargest(15)
+        quarterly_weights = monthly_data.loc[quarter_end:quarter_end+pd.DateOffset(months=3), quarter_top_crypto.index].div(monthly_data.loc[quarter_end:quarter_end+pd.DateOffset(months=3), quarter_top_crypto.index].sum(axis=1), axis=0)
+        top_crypto_weights = pd.concat([top_crypto_weights, quarterly_weights])
+
+    return top_crypto_weights
+
+st.title("Dynamic Portfolio Simulator & Crypto Analyzer")
+
+selected_year = year
+
+crypto = ['BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
+          'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
+          'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD']
+
+crypto_data = get_data(crypto, f"{selected_year}-01-01", f"{int(selected_year)+1}-01-01")
+top_crypto_weights = top_crypto_breakdown(crypto_data)
+
+
+
+st.subheader("Monthly Crypto Allocation Breakdown")
+st.dataframe(top_crypto_weights.resample('M').last())
