@@ -22,9 +22,15 @@ start_date = dt.datetime(year, 1, 1)
 end_date = dt.datetime(year, 12, 31)
 
 # Define an extended list of cryptocurrencies (to ensure a broad selection for ranking)
-cryptos = ['BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
-           'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
-           'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD']
+cryptos = [
+    'BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
+    'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
+    'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD', 'FIL-USD', 'AAVE-USD',
+    'ALGO-USD', 'ATOM-USD', 'VET-USD', 'ICP-USD', 'FTT-USD', 'SAND-USD', 'AXS-USD',
+    'MATIC-USD', 'THETA-USD', 'XTZ-USD', 'EGLD-USD', 'KSM-USD', 'CAKE-USD', 'MKR-USD',
+    'COMP-USD', 'ZEC-USD', 'XMR-USD', 'KCS-USD', 'HT-USD', 'OKB-USD', 'LEO-USD',
+    'WAVES-USD', 'MIOTA-USD', 'LUNA1-USD', 'NEAR-USD', 'APE-USD', 'GMT-USD', 'GRT-USD'
+]
 
 # Fetch historical data
 @st.cache_data(show_spinner=False)  # Cache the data for performance using the updated caching mechanism
@@ -160,16 +166,23 @@ def annualized_volatility(weights, price_data):
     return np.std(weighted_returns) * np.sqrt(252)  # 252 trading days
 
 # Assuming you have fetched and processed your price data and weights
+# Assuming you have fetched and processed your price data and weights
 if not weights.empty:
     cum_returns = cumulative_returns(weights, price_data)
-    sharpe = sharpe_ratio(weights, price_data)
-    volatility = annualized_volatility(weights, price_data)
+    if not cum_returns.empty:
+        sharpe = sharpe_ratio(weights, price_data)
+        volatility = annualized_volatility(weights, price_data)
 
-    st.metric("Cumulative Returns", f"{cum_returns[-1]:.2%}")
-    st.metric("Sharpe Ratio", f"{sharpe:.2f}")
-    st.metric("Annualized Volatility", f"{volatility:.2%}")
+        st.metric("Cumulative Returns", f"{cum_returns.iloc[-1]:.2%}")
+        st.metric("Sharpe Ratio", f"{sharpe:.2f}")
+        st.metric("Annualized Volatility", f"{volatility:.2%}")
 
-    st.line_chart(cum_returns)  # Plot cumulative returns
+        st.line_chart(cum_returns)  # Plot cumulative returns
+    else:
+        st.write("No cumulative returns data to display.")
+else:
+    st.write("No weights data to display.")
+
 
 def get_data(symbols, start, end):
     data = yf.download(symbols, start=start, end=end)
