@@ -27,10 +27,18 @@ cryptos = [
     'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
     'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD', 'FIL-USD', 'AAVE-USD',
     'ALGO-USD', 'ATOM-USD', 'VET-USD', 'ICP-USD', 'FTT-USD', 'SAND-USD', 'AXS-USD',
-    'MATIC-USD', 'THETA-USD', 'XTZ-USD', 'EGLD-USD', 'KSM-USD', 'CAKE-USD', 'MKR-USD',
+    'MATIC-USD', 'THETA-USD', 'EGLD-USD', 'KSM-USD', 'CAKE-USD', 'MKR-USD',
     'COMP-USD', 'ZEC-USD', 'XMR-USD', 'KCS-USD', 'HT-USD', 'OKB-USD', 'LEO-USD',
-    'WAVES-USD', 'MIOTA-USD', 'LUNA1-USD', 'NEAR-USD', 'APE-USD', 'GMT-USD', 'GRT-USD'
+    'WAVES-USD', 'MIOTA-USD', 'LUNA1-USD', 'NEAR-USD', 'APE-USD', 'GMT-USD', 'GRT-USD',
+    'ENJ-USD', 'MANA-USD', 'GALA-USD', 'CHZ-USD', 'FLOW-USD', 'SUSHI-USD', 'YFI-USD',
+    'CRV-USD', '1INCH-USD', 'SNX-USD', 'CELO-USD', 'AAVE-USD', 'BAT-USD', 'QTUM-USD',
+    'ZIL-USD', 'SC-USD', 'DCR-USD', 'XEM-USD', 'LSK-USD', 'RVN-USD', 'KDA-USD', 'OMG-USD',
+    'NEXO-USD', 'HNT-USD', 'ZRX-USD', 'STX-USD', 'UST-USD', 'PAXG-USD', 'TFUEL-USD',
+    'ANKR-USD', 'REN-USD', 'ICX-USD', 'FTM-USD', 'SRM-USD', 'CVC-USD', 'ALPHA-USD',
+    'AUDIO-USD', 'CKB-USD', 'BNT-USD', 'LPT-USD', 'WAXP-USD', 'SXP-USD', 'OCEAN-USD',
+    'RLY-USD', 'SKL-USD', 'UMA-USD', 'ONT-USD', 'RAY-USD', 'RSR-USD', 'AMPL-USD', 'ILV-USD'
 ]
+
 
 # Fetch historical data
 @st.cache_data(show_spinner=False)  # Cache the data for performance using the updated caching mechanism
@@ -178,8 +186,6 @@ if not weights.empty:
         st.metric("Annualized Volatility", f"{volatility:.2%}")
 
         st.line_chart(cum_returns)  # Plot cumulative returns
-    else:
-        st.write("No cumulative returns data to display.")
 else:
     st.write("No weights data to display.")
 
@@ -209,24 +215,32 @@ def rebalance_portfolio(data, initial_investment=100000):
     return portfolio.multiply(monthly_data)
 
 def top_crypto_breakdown(data):
-    quarterly_data = data.resample('Q').last()
+    # Resample data monthly
     monthly_data = data.resample('M').last()
+    
+    # Ensure every month within the data range is included in monthly_data
+    all_months = pd.date_range(start=data.index.min(), end=data.index.max(), freq='M')
+    monthly_data = monthly_data.reindex(all_months, method='ffill')  # Forward fill to handle missing data
+
     top_crypto_weights = pd.DataFrame()
 
-    for quarter_end in quarterly_data.index:
-        quarter_top_crypto = data.loc[:quarter_end].iloc[-1].nlargest(15)
-        quarterly_weights = monthly_data.loc[quarter_end:quarter_end+pd.DateOffset(months=3), quarter_top_crypto.index].div(monthly_data.loc[quarter_end:quarter_end+pd.DateOffset(months=3), quarter_top_crypto.index].sum(axis=1), axis=0)
-        top_crypto_weights = pd.concat([top_crypto_weights, quarterly_weights])
+    for month_end in monthly_data.index:
+        # Select the top 15 cryptocurrencies by their last available price of the month
+        if not monthly_data.loc[month_end].isna().all():  # Ensure there's valid data for the month
+            month_top_crypto = monthly_data.loc[month_end].nlargest(15).index
+
+            # Calculate weights for the top cryptos for the current month
+            weights = monthly_data.loc[month_end, month_top_crypto] / monthly_data.loc[month_end, month_top_crypto].sum()
+            top_crypto_weights = pd.concat([top_crypto_weights, pd.DataFrame([weights], index=[month_end])])
 
     return top_crypto_weights
+
 
 st.title("Dynamic Portfolio Simulator & Crypto Analyzer")
 
 selected_year = year
 
-crypto = ['BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
-          'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
-          'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD']
+crypto = cryptos
 
 crypto_data = get_data(crypto, f"{selected_year}-01-01", f"{int(selected_year)+1}-01-01")
 top_crypto_weights = top_crypto_breakdown(crypto_data)
