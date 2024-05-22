@@ -6,8 +6,95 @@ import matplotlib.pyplot as plt
 from datetime import datetime, timedelta
 import numpy as np
 
+
+
+# Define the list of ETF tokens
+etf_list = [
+    'BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
+    'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
+    'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD', 'FIL-USD', 'AAVE-USD',
+    'ALGO-USD', 'ATOM-USD', 'VET-USD', 'ICP-USD', 'FTT-USD', 'SAND-USD', 'AXS-USD',
+    'MATIC-USD', 'THETA-USD', 'EGLD-USD', 'KSM-USD', 'CAKE-USD', 'MKR-USD',
+    'COMP-USD', 'ZEC-USD', 'XMR-USD', 'KCS-USD', 'HT-USD', 'OKB-USD', 'LEO-USD',
+    'WAVES-USD', 'MIOTA-USD', 'LUNA1-USD', 'NEAR-USD', 'APE-USD', 'GMT-USD', 'GRT-USD',
+    'ENJ-USD', 'MANA-USD', 'GALA-USD', 'CHZ-USD', 'FLOW-USD', 'SUSHI-USD', 'YFI-USD',
+    'CRV-USD', '1INCH-USD', 'SNX-USD', 'CELO-USD', 'AAVE-USD', 'BAT-USD', 'QTUM-USD',
+    'ZIL-USD', 'SC-USD', 'DCR-USD', 'XEM-USD', 'LSK-USD', 'RVN-USD', 'KDA-USD', 'OMG-USD',
+    'NEXO-USD', 'HNT-USD', 'ZRX-USD', 'STX-USD', 'UST-USD', 'PAXG-USD', 'TFUEL-USD',
+    'ANKR-USD', 'REN-USD', 'ICX-USD', 'FTM-USD', 'SRM-USD', 'CVC-USD', 'ALPHA-USD',
+    'AUDIO-USD', 'CKB-USD', 'BNT-USD', 'LPT-USD', 'WAXP-USD', 'SXP-USD', 'OCEAN-USD',
+    'RLY-USD', 'SKL-USD', 'UMA-USD', 'ONT-USD', 'RAY-USD', 'RSR-USD', 'AMPL-USD', 'ILV-USD'
+]
+x = 'BTC-USD'
+
+# Fetch historical data for the ETFs
+def fetch_data(etfs, start_date='2020-01-01', end_date='2024-01-01'):
+    data = yf.download(etfs, start=start_date, end=end_date)['Adj Close']
+    if isinstance(data, pd.Series):  # Convert to DataFrame if a single ETF
+        data = data.to_frame()
+    return data
+
+# Calculate portfolio value over time
+def calculate_portfolio_growth(data, initial_investment):
+    daily_returns = data.pct_change().dropna()
+    cumulative_returns = (1 + daily_returns).cumprod()
+    portfolio_value = cumulative_returns * (initial_investment / len(data.columns))
+    portfolio_value['Total'] = portfolio_value.sum(axis=1)
+    return portfolio_value
+
+# Calculate monthly crypto allocation breakdown
+def calculate_monthly_allocation(data):
+    monthly_data = data.resample('M').ffill()
+    monthly_allocations = monthly_data.div(monthly_data.sum(axis=1), axis=0) * 100
+    return monthly_allocations
+
+# Plot the portfolio growth
+def plot_portfolio_growth(portfolio_value):
+    plt.figure(figsize=(14, 7))
+    for column in portfolio_value.columns:
+        plt.plot(portfolio_value.index, portfolio_value[column], label=column)
+    plt.title('Portfolio Growth Over Time')
+    plt.xlabel('Date')
+    plt.ylabel('Portfolio Value')
+    plt.legend()
+    plt.grid(True)
+    st.pyplot(plt)
+
+# Plot the monthly crypto allocation breakdown
+def plot_monthly_allocation(monthly_allocations):
+    plt.figure(figsize=(14, 7))
+    monthly_allocations.plot(kind='bar', stacked=True, figsize=(14, 7))
+    plt.title('Monthly Crypto Allocation Breakdown')
+    plt.xlabel('Month')
+    plt.ylabel('Allocation Percentage')
+    plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+    plt.grid(True)
+    st.pyplot(plt)
+
+# Streamlit app
+def main():
+    st.title('Crypto Portfolio Analysis')
+    
+    st.sidebar.header('User Input')
+    etfs = st.sidebar.text_input('Enter ETF symbols separated by commas', 'BTC-USD')
+    start_date = st.sidebar.date_input('Start Date', pd.to_datetime('2020-01-01'))
+    end_date = st.sidebar.date_input('End Date', pd.to_datetime('2024-01-01'))
+    initial_investment = st.sidebar.number_input('Initial Investment', value=10000)
+    etf_list_input = [etf.strip() for etf in etfs.split(',')]
+    
+    data = fetch_data(etf_list_input, start_date=start_date, end_date=end_date)
+    portfolio_value = calculate_portfolio_growth(data, initial_investment)
+    plot_portfolio_growth(portfolio_value)
+    
+    monthly_allocations = calculate_monthly_allocation(data)
+    plot_monthly_allocation(monthly_allocations)
+
+if __name__ == "__main__":
+    main()
+
+
+
 # Set page config
-st.set_page_config(page_title="Top Cryptocurrencies Analysis", layout="wide", page_icon="📈")
 
 # Title of the Streamlit app
 st.title("Top Cryptocurrencies by Trading Volume")
@@ -234,18 +321,3 @@ def top_crypto_breakdown(data):
             top_crypto_weights = pd.concat([top_crypto_weights, pd.DataFrame([weights], index=[month_end])])
 
     return top_crypto_weights
-
-
-st.title("Dynamic Portfolio Simulator & Crypto Analyzer")
-
-selected_year = year
-
-crypto = cryptos
-
-crypto_data = get_data(crypto, f"{selected_year}-01-01", f"{int(selected_year)+1}-01-01")
-top_crypto_weights = top_crypto_breakdown(crypto_data)
-
-
-
-st.subheader("Monthly Crypto Allocation Breakdown")
-st.dataframe(top_crypto_weights.resample('M').last())
