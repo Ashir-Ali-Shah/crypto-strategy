@@ -2,10 +2,10 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime import datetime
 
-# Define the list of ETF tokens
-etf_list = [
+# Define an extended list of cryptocurrencies (to ensure a broad selection for ranking)
+cryptos = [
     'BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
     'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
     'DOT-USD', 'UNI-USD', 'DOGE-USD', 'SOL-USD', 'AVAX-USD', 'FIL-USD', 'AAVE-USD',
@@ -22,88 +22,50 @@ etf_list = [
     'RLY-USD', 'SKL-USD', 'UMA-USD', 'ONT-USD', 'RAY-USD', 'RSR-USD', 'AMPL-USD', 'ILV-USD'
 ]
 
-# Fetch historical data for the ETFs
-def fetch_data(etfs, start_date, end_date):
-    data = yf.download(etfs, start=start_date, end=end_date)['Adj Close']
-    if isinstance(data, pd.Series):  # Convert to DataFrame if a single ETF
-        data = data.to_frame()
-    data.index = pd.to_datetime(data.index)  # Ensure the index is a DatetimeIndex
-    return data
-
-# Calculate portfolio value over time
-def calculate_portfolio_growth(data, initial_investment):
-    daily_returns = data.pct_change().dropna()
-    cumulative_returns = (1 + daily_returns).cumprod()
-    portfolio_value = cumulative_returns * (initial_investment / len(data.columns))
-    portfolio_value['Total'] = portfolio_value.sum(axis=1)
-    return portfolio_value
-
-# Calculate monthly crypto allocation breakdown
-def calculate_monthly_allocation(data):
-    monthly_data = data.resample('M').ffill()
-    monthly_allocations = monthly_data.div(monthly_data.sum(axis=1), axis=0) * 100
-    return monthly_allocations
-
-# Plot the portfolio growth
-def plot_portfolio_growth(portfolio_value):
-    plt.figure(figsize=(14, 7))
-    for column in portfolio_value.columns:
-        plt.plot(portfolio_value.index, portfolio_value[column], label=column)
-    plt.title('Portfolio Growth Over Time')
-    plt.xlabel('Date')
-    plt.ylabel('Portfolio Value')
-    plt.legend()
-    plt.grid(True)
-    st.pyplot(plt)
-
-# Plot the monthly crypto allocation breakdown
-def plot_monthly_allocation(monthly_allocations):
-    plt.figure(figsize=(14, 7))
-    monthly_allocations.plot(kind='bar', stacked=True, figsize=(14, 7))
-    plt.title('Monthly Crypto Allocation Breakdown')
-    plt.xlabel('Month')
-    plt.ylabel('Allocation Percentage')
-    plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
-    plt.grid(True)
-    st.pyplot(plt)
-
-# Fetch data and calculate top 15 cryptos by market cap for the given year
-def get_top_cryptos_by_year(year):
-    start_date = datetime(year, 1, 1)
-    end_date = datetime(year, 12, 31)
-    data = fetch_data(etf_list, start_date, end_date)
-    end_of_year_data = data.iloc[-1]
-    top_15_cryptos = end_of_year_data.nlargest(15).index.tolist()
-    return top_15_cryptos
-
+# Fetch historical data
+@st.cache_data(show_spinner=False)  # Cache the data for performance using the updated caching mechanism
 def fetch_crypto_data(cryptos, start, end):
     crypto_data = {}
     for crypto in cryptos:
         data = yf.download(crypto, start=start, end=end)
         crypto_data[crypto] = data[['Adj Close', 'Volume']]
     return crypto_data
+
+def calculate_portfolio_value(data, weights, initial_investment):
+    daily_returns = data.pct_change().dropna()
+    weighted_returns = daily_returns.dot(weights)
+    cumulative_returns = (1 + weighted_returns).cumprod()
+    portfolio_value = cumulative_returns * initial_investment
+    return portfolio_value
+
+def plot_monthly_allocation(monthly_allocations, top_3):
+    plt.figure(figsize=(14, 7))
+    top_3_allocations = monthly_allocations[top_3]
+    others_allocations = monthly_allocations.drop(columns=top_3).sum(axis=1).rename("Others")
+    combined_allocations = pd.concat([top_3_allocations, others_allocations], axis=1)
+    
+    combined_allocations.plot(kind='bar', stacked=True, figsize=(14, 7), color=['skyblue', 'lightgreen', 'lightcoral', 'lightgrey'], alpha=0.7)
+    plt.title('Monthly Crypto Allocation Breakdown')
+    plt.xlabel('Month')
+    plt.ylabel('Allocation Percentage')
+    plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+    plt.grid(True, linestyle='--', alpha=0.5)
+    st.pyplot(plt)
+
 def main():
-    st.title('Crypto Portfolio Analysis')
-    
-    st.sidebar.header('User Input')
-    selected_year = st.sidebar.selectbox('Select Year', options=range(2020, 2024))
-    initial_investment = st.sidebar.number_input('Initial Investment', value=10000)
-    
-    top_15_cryptos = get_top_cryptos_by_year(selected_year)
-    
-    data = fetch_data(top_15_cryptos, f'{selected_year}-01-01', f'{selected_year}-12-31')
-    portfolio_value = calculate_portfolio_growth(data, initial_investment)
-    plot_portfolio_growth(portfolio_value)
-    
-    monthly_allocations = calculate_monthly_allocation(data)
-    plot_monthly_allocation(monthly_allocations)
-    # Fetch historical data
-    cryptos = etf_list
     st.title("Top Cryptocurrencies by Trading Volume")
     st.markdown("Explore the top 15 cryptocurrencies based on their trading volumes and year-over-year performance.")
 
     # Sidebar for input to keep main area less cluttered
-    year = selected_year
+    with st.sidebar:
+        year = st.selectbox("Select Year", options=range(2023, 2019, -1), index=0)
+        strategy = st.selectbox("Select Portfolio Strategy", options=[
+            'Market Cap Weighted', 
+            'Capped Market Cap Weighted', 
+            'Top 15 by Volume'
+        ])
+        cap = st.number_input("Capped Percentage (for Capped Strategy)", value=25, min_value=0, max_value=100)
+        initial_investment = st.number_input("Initial Investment (USD)", value=10000, min_value=1)
 
     # Define the start and end dates for the given year
     start_date = datetime(year, 1, 1)
@@ -132,6 +94,58 @@ def main():
                       value=f"{average_volumes[crypto]:,.0f}",
                       delta=f"{price_changes.get(crypto, 0):.2f}% change")
 
+    # Get data for top 15 cryptos
+    top_cryptos_data = {crypto: crypto_data[crypto] for crypto in top_cryptos}
+
+    # Prepare data for portfolio calculations
+    prices = pd.DataFrame({crypto: data['Adj Close'] for crypto, data in top_cryptos_data.items()})
+
+    # Define portfolio strategies
+    def market_cap_weighted(prices):
+        latest_prices = prices.iloc[-1]
+        total_market_cap = latest_prices.sum()
+        weights = latest_prices / total_market_cap
+        return weights
+
+    def capped_market_cap_weighted(prices, cap_percentage):
+        weights = market_cap_weighted(prices)
+        cap = cap_percentage / 100
+        weights = weights.clip(upper=cap)
+        weights /= weights.sum()
+        return weights
+
+    def top_15_by_volume(prices):
+        return pd.Series([1/len(prices.columns)] * len(prices.columns), index=prices.columns)
+
+    # Determine portfolio weights based on the selected strategy
+    if strategy == 'Market Cap Weighted':
+        weights = market_cap_weighted(prices)
+    elif strategy == 'Capped Market Cap Weighted':
+        weights = capped_market_cap_weighted(prices, cap)
+    else:
+        weights = top_15_by_volume(prices)
+
+    # Calculate portfolio value over time
+    portfolio_value = calculate_portfolio_value(prices, weights, initial_investment)
+
+    # Plot portfolio value
+    st.subheader(f'Portfolio Value Over Time ({strategy})')
+    fig, ax = plt.subplots()
+    ax.plot(portfolio_value, label='Portfolio Value', color='lightgreen', alpha=0.7)
+    ax.set_title(f'Portfolio Value Over Time ({strategy})')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Portfolio Value (USD)')
+    ax.legend()
+    ax.grid(True, linestyle='--', alpha=0.5)
+    st.pyplot(fig)
+
+    # Calculate monthly crypto allocation breakdown
+    monthly_allocations = prices.resample('M').ffill().pct_change().dropna().dot(weights)
+
+    # Plot monthly allocation with top 3 colors and the rest as "Others"
+    st.subheader(f'Monthly Allocation Breakdown ({strategy})')
+    plot_monthly_allocation(prices.resample('M').ffill(), top_cryptos[:3])
+
     # Visualization of the price data of the top cryptocurrencies with improved aesthetics
     expander = st.expander("View Detailed Price Charts")
     with expander:
@@ -139,14 +153,13 @@ def main():
         for i, crypto in enumerate(top_cryptos):
             with (col1 if i % 2 == 0 else col2):
                 fig, ax = plt.subplots()
-                ax.plot(crypto_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='lightgreen', alpha=0.7)
+                ax.plot(top_cryptos_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='lightblue', alpha=0.7)
                 ax.set_title(f"{crypto} Adjusted Close Price in {year}")
                 ax.set_xlabel("Date")
                 ax.set_ylabel("Adjusted Close Price (USD)")
                 ax.legend()
                 ax.grid(True, linestyle='--', alpha=0.5)
                 st.pyplot(fig)
-    
+
 if __name__ == "__main__":
     main()
-
