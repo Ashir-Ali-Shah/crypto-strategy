@@ -4,6 +4,29 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+# Custom CSS for better styling
+st.markdown(
+    """
+    <style>
+    .main {
+        background-color: #f5f5f5;
+    }
+    .stMetric {
+        background-color: #ffffff;
+        padding: 10px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        margin: 10px;
+    }
+    .stSidebar .stSelectbox, .stSidebar .stNumberInput {
+        background-color: #ffffff;
+        border-radius: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Define an extended list of cryptocurrencies (to ensure a broad selection for ranking)
 cryptos = [
     'BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
@@ -44,7 +67,7 @@ def plot_monthly_allocation(monthly_allocations, top_3):
     others_allocations = monthly_allocations.drop(columns=top_3).sum(axis=1).rename("Others")
     combined_allocations = pd.concat([top_3_allocations, others_allocations], axis=1)
     
-    combined_allocations.plot(kind='bar', stacked=True, figsize=(14, 7), color=['skyblue', 'lightgreen', 'lightcoral', 'lightgrey'], alpha=0.7)
+    combined_allocations.plot(kind='bar', stacked=True, figsize=(14, 7), color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'], alpha=0.8)
     plt.title('Monthly Crypto Allocation Breakdown')
     plt.xlabel('Month')
     plt.ylabel('Allocation Percentage')
@@ -58,6 +81,7 @@ def main():
 
     # Sidebar for input to keep main area less cluttered
     with st.sidebar:
+        st.header("User Inputs")
         year = st.selectbox("Select Year", options=range(2023, 2019, -1), index=0)
         strategy = st.selectbox("Select Portfolio Strategy", options=[
             'Market Cap Weighted', 
@@ -131,7 +155,7 @@ def main():
     # Plot portfolio value
     st.subheader(f'Portfolio Value Over Time ({strategy})')
     fig, ax = plt.subplots()
-    ax.plot(portfolio_value, label='Portfolio Value', color='lightgreen', alpha=0.7)
+    ax.plot(portfolio_value, label='Portfolio Value', color='#2ca02c', alpha=0.8)
     ax.set_title(f'Portfolio Value Over Time ({strategy})')
     ax.set_xlabel('Date')
     ax.set_ylabel('Portfolio Value (USD)')
@@ -149,11 +173,12 @@ def main():
     # Visualization of the price data of the top cryptocurrencies with improved aesthetics
     expander = st.expander("View Detailed Price Charts")
     with expander:
+        st.markdown("Here you can explore detailed price charts for each of the top 15 cryptocurrencies:")
         col1, col2 = st.columns(2)
         for i, crypto in enumerate(top_cryptos):
             with (col1 if i % 2 == 0 else col2):
                 fig, ax = plt.subplots()
-                ax.plot(top_cryptos_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='lightblue', alpha=0.7)
+                ax.plot(top_cryptos_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='#1f77b4', alpha=0.8)
                 ax.set_title(f"{crypto} Adjusted Close Price in {year}")
                 ax.set_xlabel("Date")
                 ax.set_ylabel("Adjusted Close Price (USD)")
