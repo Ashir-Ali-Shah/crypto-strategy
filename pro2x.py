@@ -4,29 +4,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-# Custom CSS for better styling
-st.markdown(
-    """
-    <style>
-    .main {
-        background-color: #f5f5f5;
-    }
-    .stMetric {
-        background-color: #ffffff;
-        padding: 10px;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        margin: 10px;
-    }
-    .stSidebar .stSelectbox, .stSidebar .stNumberInput {
-        background-color: #ffffff;
-        border-radius: 10px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # Define an extended list of cryptocurrencies (to ensure a broad selection for ranking)
 cryptos = [
     'BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
@@ -67,21 +44,21 @@ def plot_monthly_allocation(monthly_allocations, top_3):
     others_allocations = monthly_allocations.drop(columns=top_3).sum(axis=1).rename("Others")
     combined_allocations = pd.concat([top_3_allocations, others_allocations], axis=1)
     
-    combined_allocations.plot(kind='bar', stacked=True, figsize=(14, 7), color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'], alpha=0.8)
-    plt.title('Monthly Crypto Allocation Breakdown')
-    plt.xlabel('Month')
-    plt.ylabel('Allocation Percentage')
+    combined_allocations.plot(kind='bar', stacked=True, figsize=(14, 7), color=['#A6CEE3', '#B2DF8A', '#FB9A99', '#FDBF6F'], alpha=0.9)
+    plt.title('Monthly Crypto Allocation Breakdown', fontsize=14, color='#333333')
+    plt.xlabel('Month', fontsize=12, color='#333333')
+    plt.ylabel('Allocation Percentage', fontsize=12, color='#333333')
     plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
-    plt.grid(True, linestyle='--', alpha=0.5)
+    plt.grid(True, linestyle='--', alpha=0.5, color='#DDDDDD')
     st.pyplot(plt)
 
 def main():
-    st.title("Top Cryptocurrencies by Trading Volume")
-    st.markdown("Explore the top 15 cryptocurrencies based on their trading volumes and year-over-year performance.")
+    st.title("Top Cryptocurrencies by Trading Volume", anchor=None)
+    st.markdown("Explore the top 15 cryptocurrencies based on their trading volumes and year-over-year performance.", unsafe_allow_html=False)
 
     # Sidebar for input to keep main area less cluttered
     with st.sidebar:
-        st.header("User Inputs")
+        st.header("User Inputs", anchor=None)
         year = st.selectbox("Select Year", options=range(2023, 2019, -1), index=0)
         strategy = st.selectbox("Select Portfolio Strategy", options=[
             'Market Cap Weighted', 
@@ -110,7 +87,7 @@ def main():
     top_cryptos = sorted(average_volumes, key=average_volumes.get, reverse=True)[:15]
 
     # Display top cryptocurrencies, their average volume, and price change in a nicer format using metrics
-    st.subheader(f"Top 15 Cryptocurrencies by Trading Volume in {year}")
+    st.subheader(f"Top 15 Cryptocurrencies by Trading Volume in {year}", anchor=None)
     col1, col2, col3 = st.columns(3)
     for i, crypto in enumerate(top_cryptos):
         with (col1 if i % 3 == 0 else col2 if i % 3 == 1 else col3):
@@ -135,7 +112,9 @@ def main():
         weights = market_cap_weighted(prices)
         cap = cap_percentage / 100
         weights = weights.clip(upper=cap)
-        weights /= weights.sum()
+        excess = weights.sum() - 1
+        if excess > 0:
+            weights -= excess * (weights / weights.sum())
         return weights
 
     def top_15_by_volume(prices):
@@ -153,37 +132,37 @@ def main():
     portfolio_value = calculate_portfolio_value(prices, weights, initial_investment)
 
     # Plot portfolio value
-    st.subheader(f'Portfolio Value Over Time ({strategy})')
+    st.subheader(f'Portfolio Value Over Time ({strategy})', anchor=None)
     fig, ax = plt.subplots()
-    ax.plot(portfolio_value, label='Portfolio Value', color='#2ca02c', alpha=0.8)
-    ax.set_title(f'Portfolio Value Over Time ({strategy})')
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Portfolio Value (USD)')
+    ax.plot(portfolio_value, label='Portfolio Value', color='#6BAED6', alpha=0.9)
+    ax.set_title(f'Portfolio Value Over Time ({strategy})', fontsize=14, color='#333333')
+    ax.set_xlabel('Date', fontsize=12, color='#333333')
+    ax.set_ylabel('Portfolio Value (USD)', fontsize=12, color='#333333')
     ax.legend()
-    ax.grid(True, linestyle='--', alpha=0.5)
+    ax.grid(True, linestyle='--', alpha=0.5, color='#DDDDDD')
     st.pyplot(fig)
 
     # Calculate monthly crypto allocation breakdown
     monthly_allocations = prices.resample('M').ffill().pct_change().dropna().dot(weights)
 
     # Plot monthly allocation with top 3 colors and the rest as "Others"
-    st.subheader(f'Monthly Allocation Breakdown ({strategy})')
+    st.subheader(f'Monthly Allocation Breakdown ({strategy})', anchor=None)
     plot_monthly_allocation(prices.resample('M').ffill(), top_cryptos[:3])
 
     # Visualization of the price data of the top cryptocurrencies with improved aesthetics
-    expander = st.expander("View Detailed Price Charts")
+    expander = st.expander("View Detailed Price Charts", expanded=False)
     with expander:
-        st.markdown("Here you can explore detailed price charts for each of the top 15 cryptocurrencies:")
+        st.markdown("Here you can explore detailed price charts for each of the top 15 cryptocurrencies:", unsafe_allow_html=False)
         col1, col2 = st.columns(2)
         for i, crypto in enumerate(top_cryptos):
             with (col1 if i % 2 == 0 else col2):
                 fig, ax = plt.subplots()
-                ax.plot(top_cryptos_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='#1f77b4', alpha=0.8)
-                ax.set_title(f"{crypto} Adjusted Close Price in {year}")
-                ax.set_xlabel("Date")
-                ax.set_ylabel("Adjusted Close Price (USD)")
+                ax.plot(top_cryptos_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='#6BAED6', alpha=0.9)
+                ax.set_title(f"{crypto} Adjusted Close Price in {year}", fontsize=14, color='#333333')
+                ax.set_xlabel("Date", fontsize=12, color='#333333')
+                ax.set_ylabel("Adjusted Close Price (USD)", fontsize=12, color='#333333')
                 ax.legend()
-                ax.grid(True, linestyle='--', alpha=0.5)
+                ax.grid(True, linestyle='--', alpha=0.5, color='#DDDDDD')
                 st.pyplot(fig)
 
 if __name__ == "__main__":
