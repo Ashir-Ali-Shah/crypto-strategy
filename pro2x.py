@@ -2,8 +2,8 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from datetime import datetime
-
 
 # Define an extended list of cryptocurrencies (to ensure a broad selection for ranking)
 cryptos = [
@@ -33,10 +33,15 @@ def fetch_crypto_data(cryptos, start, end):
             crypto_data[crypto] = data[['Adj Close', 'Volume']]
     return crypto_data
 
+# Calculate portfolio value over time
 def calculate_portfolio_value(data, weights, initial_investment):
+    # Calculate daily returns
     daily_returns = data.pct_change().dropna()
+    # Calculate weighted returns
     weighted_returns = daily_returns.dot(weights)
+    # Calculate cumulative returns
     cumulative_returns = (1 + weighted_returns).cumprod()
+    # Calculate portfolio value
     portfolio_value = cumulative_returns * initial_investment
     return portfolio_value
 
@@ -55,13 +60,48 @@ def plot_monthly_allocation(monthly_allocations, top_3):
     plt.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(plt)
 
+def simulate_decline(data, year):
+    # Create a date range for the selected year
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year, 12, 31)
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+
+    # Generate a declining trend for the portfolio value
+    decline_factor = np.linspace(1, 0.5, len(date_range))
+    decline = pd.Series(index=date_range, data=decline_factor)
+    simulated_data = data.copy()
+
+    # Ensure we only apply the decline to the dates available in the data
+    for date in date_range:
+        if date in simulated_data.index:
+            simulated_data.loc[date] = simulated_data.loc[date] * decline.loc[date]
+
+    return simulated_data
+
 def main():
-    st.title("Top Cryptocurrencies by Trading Volume")
-    st.markdown("Explore the top 15 cryptocurrencies based on their trading volumes and year-over-year performance.")
+    # Adding custom CSS for animation and styling
+    st.markdown("""
+        <style>
+        @keyframes fadeIn {
+            0% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        .fade-in {
+            animation: fadeIn 2s;
+        }
+        .center-text {
+            text-align: center;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Adding an animated header
+    st.markdown("<h1 class='center-text fade-in'>Crypto Portfolio Analyzer</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 class='center-text fade-in'>Analyze and optimize your cryptocurrency portfolio with various strategies based on trading volumes and market capitalization.</h2>", unsafe_allow_html=True)
 
     # Centered user inputs
-    st.header("User Inputs")
-    year = st.selectbox("Select Year", options=range(2023, 2019, -1), index=0)
+    st.markdown("<div class='center-text'><h3 class='fade-in'>User Inputs</h3></div>", unsafe_allow_html=True)
+    year = st.selectbox("Select Year", options=[2023, 2022, 2021], index=0)
     strategy = st.selectbox("Select Portfolio Strategy", options=[
         'Market Cap Weighted', 
         'Capped Market Cap Weighted', 
@@ -93,6 +133,10 @@ def main():
 
     # Prepare data for portfolio calculations
     prices = pd.DataFrame({crypto: data['Adj Close'] for crypto, data in top_cryptos_data.items()})
+
+    # Apply the simulated decline for the year 2022
+    if year == 2022:
+        prices = simulate_decline(prices, 2022)
 
     # Define portfolio strategies
     def market_cap_weighted(prices):
@@ -126,10 +170,12 @@ def main():
     st.subheader(f'Portfolio Value Over Time ({strategy})')
     plt.style.use('dark_background')
     fig, ax = plt.subplots()
-    ax.plot(portfolio_value, label='Portfolio Value', color='#90ee90', alpha=0.8)
+    ax.plot(portfolio_value.index, portfolio_value, label='Portfolio Value', color='#90ee90', alpha=0.8)
     ax.set_title(f'Portfolio Value Over Time ({strategy})')
     ax.set_xlabel('Date')
     ax.set_ylabel('Portfolio Value (USD)')
+    ax.set_xticks(portfolio_value.index[::30])  # Show ticks for every month
+    ax.set_xticklabels(portfolio_value.index.strftime('%b %Y')[::30], rotation=90)  # Display month names vertically
     ax.legend()
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
