@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
 
-# Define an extended list of cryptocurrencies (to ensure a broad selection for ranking)
+# Define an extended list of cryptocurrencies
 cryptos = [
     'BTC-USD', 'ETH-USD', 'XRP-USD', 'BCH-USD', 'ADA-USD', 'LTC-USD', 'EOS-USD', 'BNB-USD',
     'XTZ-USD', 'XLM-USD', 'LINK-USD', 'TRX-USD', 'NEO-USD', 'IOTA-USD', 'DASH-USD',
@@ -13,9 +13,9 @@ cryptos = [
     'ALGO-USD', 'ATOM-USD', 'VET-USD', 'ICP-USD', 'FTT-USD', 'SAND-USD', 'AXS-USD',
     'MATIC-USD', 'THETA-USD', 'EGLD-USD', 'KSM-USD', 'CAKE-USD', 'MKR-USD',
     'COMP-USD', 'ZEC-USD', 'XMR-USD', 'KCS-USD', 'HT-USD', 'OKB-USD', 'LEO-USD',
-    'WAVES-USD', 'MIOTA-USD', 'LUNA1-USD', 'NEAR-USD', 'APE-USD', 'GMT-USD', 'GRT-USD',
+    'WAVES-USD', 'MIOTA-USD', 'NEAR-USD', 'APE-USD', 'GMT-USD', 'GRT-USD',
     'ENJ-USD', 'MANA-USD', 'GALA-USD', 'CHZ-USD', 'FLOW-USD', 'SUSHI-USD', 'YFI-USD',
-    'CRV-USD', '1INCH-USD', 'SNX-USD', 'CELO-USD', 'AAVE-USD', 'BAT-USD', 'QTUM-USD',
+    'CRV-USD', '1INCH-USD', 'SNX-USD', 'CELO-USD', 'BAT-USD', 'QTUM-USD',
     'ZIL-USD', 'SC-USD', 'DCR-USD', 'XEM-USD', 'LSK-USD', 'RVN-USD', 'KDA-USD', 'OMG-USD',
     'NEXO-USD', 'HNT-USD', 'ZRX-USD', 'STX-USD', 'UST-USD', 'PAXG-USD', 'TFUEL-USD',
     'ANKR-USD', 'REN-USD', 'ICX-USD', 'FTM-USD', 'SRM-USD', 'CVC-USD', 'ALPHA-USD',
@@ -36,29 +36,31 @@ def fetch_crypto_data(cryptos, start, end):
 # Calculate portfolio value over time
 def calculate_portfolio_value(data, weights, initial_investment):
     # Calculate daily returns
-    daily_returns = data.pct_change().dropna()
+    daily_returns = data.pct_change(fill_method=None).dropna()
     # Calculate weighted returns
     weighted_returns = daily_returns.dot(weights)
     # Calculate cumulative returns
     cumulative_returns = (1 + weighted_returns).cumprod()
     # Calculate portfolio value
     portfolio_value = cumulative_returns * initial_investment
-    return portfolio_value
+    return portfolio_value, weighted_returns
 
-def plot_monthly_allocation(monthly_allocations, top_3):
+def plot_monthly_allocation(monthly_prices, weights, top_3):
     plt.style.use('dark_background')
-    plt.figure(figsize=(14, 7))
+    monthly_returns = monthly_prices.pct_change(fill_method=None).dropna()
+    monthly_allocations = (monthly_returns + 1).cumprod() * weights * monthly_prices.iloc[0]
     top_3_allocations = monthly_allocations[top_3]
     others_allocations = monthly_allocations.drop(columns=top_3).sum(axis=1).rename("Others")
     combined_allocations = pd.concat([top_3_allocations, others_allocations], axis=1)
     
-    combined_allocations.plot(kind='bar', stacked=True, figsize=(14, 7), color=['#add8e6', '#90ee90', '#ffcc99', '#ffb6c1'], alpha=0.8)
-    plt.title('Monthly Crypto Allocation Breakdown')
-    plt.xlabel('Month')
-    plt.ylabel('Allocation Percentage')
-    plt.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
-    plt.grid(True, linestyle='--', alpha=0.5)
-    st.pyplot(plt)
+    fig, ax = plt.subplots(figsize=(14, 7))
+    combined_allocations.plot(kind='bar', stacked=True, ax=ax, alpha=0.8)
+    ax.set_title('Monthly Crypto Allocation Breakdown')
+    ax.set_xlabel('Month')
+    ax.set_ylabel('Value in USD')
+    ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+    ax.grid(True, linestyle='--', alpha=0.5)
+    st.pyplot(fig)
 
 def simulate_decline(data, year):
     # Create a date range for the selected year
@@ -140,20 +142,28 @@ def main():
 
     # Define portfolio strategies
     def market_cap_weighted(prices):
-        latest_prices = prices.iloc[-1]
-        total_market_cap = latest_prices.sum()
-        weights = latest_prices / total_market_cap
+        weights = pd.Series(0, index=prices.columns)
+        weights['BTC-USD'] = 0.25
+        remaining_cryptos = prices.columns.drop('BTC-USD')
+        remaining_weights = (prices.iloc[-1][remaining_cryptos] / prices.iloc[-1][remaining_cryptos].sum()) * 0.75
+        weights[remaining_cryptos] = remaining_weights
         return weights
 
     def capped_market_cap_weighted(prices, cap_percentage):
         weights = market_cap_weighted(prices)
         cap = cap_percentage / 100
-        weights = weights.clip(upper=cap)
+        weights[weights > cap] = cap
         weights /= weights.sum()
         return weights
 
     def top_15_by_volume(prices):
-        return pd.Series([1/len(prices.columns)] * len(prices.columns), index=prices.columns)
+        weights = pd.Series(0.05, index=prices.columns)  # Each of the 15 will get 5%
+        weights['BTC-USD'] = 0.25  # BTC always has 25%
+        remaining_weight = 0.75 - 0.05 * (len(prices.columns) - 1)
+        for crypto in prices.columns:
+            if crypto != 'BTC-USD':
+                weights[crypto] = remaining_weight / (len(prices.columns) - 1)
+        return weights
 
     # Determine portfolio weights based on the selected strategy
     if strategy == 'Market Cap Weighted':
@@ -163,29 +173,75 @@ def main():
     else:
         weights = top_15_by_volume(prices)
 
-    # Calculate portfolio value over time
-    portfolio_value = calculate_portfolio_value(prices, weights, initial_investment)
+    # Display top 15 coins and their weightage
+    st.subheader(f'Top 15 Coins and Their Weightage ({strategy})')
+    top_coins_df = pd.DataFrame({
+        'Coin': weights.index,
+        'Weightage (%)': (weights.values * 100).round(2),
+        'Latest Price (USD)': prices.iloc[-1].values.round(2)
+    }).reset_index(drop=True)
 
-    # Plot portfolio value
-    st.subheader(f'Portfolio Value Over Time ({strategy})')
-    plt.style.use('dark_background')
+    # Apply coloring and icons to the DataFrame
+    def style_weightage(val):
+        return 'color: #90ee90; font-weight: bold;' if isinstance(val, (int, float)) else ''
+
+    def style_usd(val):
+        return 'color: #90ee90; font-weight: bold;' if isinstance(val, (int, float)) else ''
+
+    st.dataframe(top_coins_df.style
+        .applymap(style_weightage, subset=['Weightage (%)'])
+        .applymap(style_usd, subset=['Latest Price (USD)'])
+        .set_caption("Top 15 Coins and Their Weightage"))
+
+    # Plot a horizontal bar chart for top 15 coins and their weightage
+    st.subheader('Top 15 Coins Weightage Visualization')
     fig, ax = plt.subplots()
-    ax.plot(portfolio_value.index, portfolio_value, label='Portfolio Value', color='#90ee90', alpha=0.8)
-    ax.set_title(f'Portfolio Value Over Time ({strategy})')
+    plt.style.use('dark_background')
+    ax.barh(top_coins_df['Coin'], top_coins_df['Weightage (%)'], color='#90ee90', alpha=0.8)
+    ax.set_xlabel('Weightage (%)')
+    ax.set_title('Top 15 Coins and Their Weightage')
+    st.pyplot(fig)
+
+    # Display monthly prices for top 15 coins
+    monthly_prices = prices.resample('ME').ffill()
+    st.subheader(f'Monthly Prices for Top 15 Coins ({strategy})')
+    monthly_prices_styled = monthly_prices.style.format("{:.2f}").applymap(lambda x: 'color: #90ee90;' if x >= 0 else 'color: #ff4d4d;')
+    st.dataframe(monthly_prices_styled.set_caption("Monthly Prices"))
+
+    # Plot monthly prices for top 15 coins
+    st.subheader('Monthly Prices Visualization')
+    fig, ax = plt.subplots(figsize=(14, 7))
+    plt.style.use('dark_background')
+    for crypto in top_cryptos:
+        ax.plot(monthly_prices.index, monthly_prices[crypto], label=crypto)
+    ax.set_title('Monthly Prices for Top 15 Coins')
     ax.set_xlabel('Date')
-    ax.set_ylabel('Portfolio Value (USD)')
-    ax.set_xticks(portfolio_value.index[::30])  # Show ticks for every month
-    ax.set_xticklabels(portfolio_value.index.strftime('%b %Y')[::30], rotation=90)  # Display month names vertically
+    ax.set_ylabel('Price (USD)')
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.grid(True, linestyle='--', alpha=0.5)
+    st.pyplot(fig)
+
+    # Calculate portfolio value over time
+    portfolio_value, weighted_returns = calculate_portfolio_value(prices, weights, initial_investment)
+
+    # Plot portfolio allocation over time
+    st.subheader(f'Portfolio Allocation Over Time ({strategy})')
+    allocation_percentage = portfolio_value / initial_investment * 100  # Normalize to show percentage of initial investment
+    plt.style.use('dark_background')
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.plot(allocation_percentage.index, allocation_percentage, label='Portfolio Allocation (%)', color='#90ee90', alpha=0.8)
+    ax.set_title(f'Portfolio Allocation Over Time ({strategy})')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Portfolio Allocation (%)')
+    ax.set_xticks(allocation_percentage.index[::30])  # Show ticks for every month
+    ax.set_xticklabels(allocation_percentage.index.strftime('%b %Y')[::30], rotation=90)  # Display month names vertically
     ax.legend()
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
 
     # Calculate monthly crypto allocation breakdown
-    monthly_allocations = prices.resample('M').ffill().pct_change().dropna().dot(weights)
-
-    # Plot monthly allocation with top 3 colors and the rest as "Others"
     st.subheader(f'Monthly Allocation Breakdown ({strategy})')
-    plot_monthly_allocation(prices.resample('M').ffill(), top_cryptos[:3])
+    plot_monthly_allocation(monthly_prices, weights, top_cryptos[:3])
 
     # Visualization of the price data of the top cryptocurrencies with improved aesthetics
     expander = st.expander("View Detailed Price Charts")
