@@ -185,25 +185,9 @@ def main():
     st.pyplot(fig)
 
     monthly_prices = prices.resample('ME').ffill()
-    st.subheader(f'Monthly Prices for Top 15 Coins ({strategy})')
-    monthly_prices_styled = monthly_prices.style.format("{:.2f}").applymap(lambda x: 'color: #90ee90;' if x >= 0 else 'color: #ff4d4d;')
-    st.dataframe(monthly_prices_styled.set_caption("Monthly Prices"))
 
-    st.subheader('Monthly Prices Visualization')
-    fig, ax = plt.subplots(figsize=(14, 7))
-    plt.style.use('dark_background')
-    for crypto in top_cryptos:
-        ax.plot(monthly_prices.index, monthly_prices[crypto], label=crypto)
-    ax.set_title('Monthly Prices for Top 15 Coins')
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Price (USD)')
-    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
-    ax.grid(True, linestyle='--', alpha=0.5)
-    st.pyplot(fig)
-
+    st.subheader(f'Portfolio Value Over Time ({strategy})')
     portfolio_value, weighted_returns = calculate_portfolio_value(prices, weights, initial_investment)
-
-    st.subheader(f'Portfolio Allocation Over Time ({strategy})')
     allocation_percentage = portfolio_value / initial_investment * 100
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(14, 7))
@@ -216,6 +200,25 @@ def main():
     ax.legend()
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
+
+    st.subheader(f'Monthly Prices for Top 15 Coins ({strategy})')
+    monthly_prices_styled = monthly_prices.style.format("{:.2f}").applymap(lambda x: 'color: #90ee90;' if x >= 0 else 'color: #ff4d4d;')
+    st.dataframe(monthly_prices_styled.set_caption("Monthly Prices"))
+
+    
+    st.subheader('Monthly Prices Visualization')
+    fig, ax = plt.subplots(figsize=(14, 7))
+    plt.style.use('dark_background')
+    for crypto in top_cryptos:
+        ax.plot(monthly_prices.index, monthly_prices[crypto], label=crypto)
+    ax.set_title('Monthly Prices for Top 15 Coins')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Price (USD)')
+    ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
+    ax.grid(True, linestyle='--', alpha=0.5)
+    st.pyplot(fig)
+
+  
 
     st.subheader(f'Monthly Allocation Breakdown ({strategy})')
     plot_monthly_allocation(monthly_prices, weights, top_cryptos[:3])
