@@ -69,14 +69,14 @@ def simulate_decline(data, year):
     return simulated_data
 
 def enforce_cap(weights, cap):
-    if weights.max() > cap:
+    while weights.max() > cap:
         excess = weights[weights > cap] - cap
         total_excess = excess.sum()
         adjusted_weights = weights.copy()
         adjusted_weights[weights > cap] = cap
         remaining_cryptos = adjusted_weights[adjusted_weights < cap]
-        adjusted_weights[adjusted_weights < cap] += excess.sum() * remaining_cryptos / remaining_cryptos.sum()
-        return adjusted_weights / adjusted_weights.sum()
+        adjusted_weights[adjusted_weights < cap] += total_excess * (remaining_cryptos / remaining_cryptos.sum())
+        weights = adjusted_weights / adjusted_weights.sum()
     return weights
 
 def market_cap_weighted(prices):
@@ -92,12 +92,12 @@ def capped_market_cap_weighted(prices, cap_percentage):
     return enforce_cap(weights, cap_percentage / 100)
 
 def top_15_by_volume(prices):
-    weights = pd.Series(0.05, index=prices.columns)
+    weights = pd.Series(0, index=prices.columns)
     weights['BTC-USD'] = 0.25
-    remaining_weight = 0.75 - 0.05 * (len(prices.columns) - 1)
-    for crypto in prices.columns:
-        if crypto != 'BTC-USD':
-            weights[crypto] = remaining_weight / (len(prices.columns) - 1)
+    remaining_weight = 0.75
+    other_cryptos = prices.columns.drop('BTC-USD')
+    equal_weight = remaining_weight / len(other_cryptos)
+    weights[other_cryptos] = equal_weight
     return enforce_cap(weights, 0.25)
 
 def main():
