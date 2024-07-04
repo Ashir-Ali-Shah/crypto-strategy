@@ -39,35 +39,6 @@ def calculate_portfolio_value(data, weights, initial_investment):
     portfolio_value = cumulative_returns * initial_investment
     return portfolio_value, weighted_returns
 
-def plot_monthly_allocation(monthly_prices, weights, top_3):
-    plt.style.use('dark_background')
-    monthly_returns = monthly_prices.pct_change(fill_method=None).dropna()
-    monthly_allocations = (monthly_returns + 1).cumprod() * weights * monthly_prices.iloc[0]
-    top_3_allocations = monthly_allocations[top_3]
-    others_allocations = monthly_allocations.drop(columns=top_3).sum(axis=1).rename("Others")
-    combined_allocations = pd.concat([top_3_allocations, others_allocations], axis=1)
-    
-    fig, ax = plt.subplots(figsize=(14, 7))
-    combined_allocations.plot(kind='bar', stacked=True, ax=ax, alpha=0.8)
-    ax.set_title('Monthly Crypto Allocation Breakdown')
-    ax.set_xlabel('Month')
-    ax.set_ylabel('Value in USD')
-    ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
-    ax.grid(True, linestyle='--', alpha=0.5)
-    st.pyplot(fig)
-
-def simulate_decline(data, year):
-    start_date = datetime(year, 1, 1)
-    end_date = datetime(year, 12, 31)
-    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
-    decline_factor = np.linspace(1, 0.5, len(date_range))
-    decline = pd.Series(index=date_range, data=decline_factor)
-    simulated_data = data.copy()
-    for date in date_range:
-        if date in simulated_data.index:
-            simulated_data.loc[date] = simulated_data.loc[date] * decline.loc[date]
-    return simulated_data
-
 def enforce_cap(weights, cap):
     while weights.max() > cap:
         excess = weights[weights > cap] - cap
@@ -81,10 +52,9 @@ def enforce_cap(weights, cap):
 
 def market_cap_weighted(prices):
     weights = pd.Series(0, index=prices.columns)
-    weights['BTC-USD'] = 0.25
-    remaining_cryptos = prices.columns.drop('BTC-USD')
-    remaining_weights = (prices.iloc[-1][remaining_cryptos] / prices.iloc[-1][remaining_cryptos].sum()) * 0.75
-    weights[remaining_cryptos] = remaining_weights
+    total_market_cap = prices.iloc[-1].sum()
+    for crypto in prices.columns:
+        weights[crypto] = prices[crypto].iloc[-1] / total_market_cap
     return enforce_cap(weights, 0.25)
 
 def capped_market_cap_weighted(prices, cap_percentage):
@@ -93,12 +63,22 @@ def capped_market_cap_weighted(prices, cap_percentage):
 
 def top_15_by_volume(prices):
     weights = pd.Series(0, index=prices.columns)
-    weights['BTC-USD'] = 0.25
-    remaining_weight = 0.75
-    other_cryptos = prices.columns.drop('BTC-USD')
-    equal_weight = remaining_weight / len(other_cryptos)
-    weights[other_cryptos] = equal_weight
+    total_volume = prices.sum().sum()
+    for crypto in prices.columns:
+        weights[crypto] = prices[crypto].sum() / total_volume
     return enforce_cap(weights, 0.25)
+
+def simulate_decline(data, year):
+    start_date = datetime(year, 1, 1)
+    end_date = datetime(year, 12, 31)
+    date_range = pd.date_range(start=start_date, end=end_date, freq='D')
+    decline_factor = np.linspace(1, 0.5, len(date_range))
+    decline = pd.Series(index=date_range, data=decline_factor)
+    simulated_data = data.copy()
+    for date in date_range:
+        if date in simulated_data.index:
+            simulated_data.loc[date] = simulated_data.loc[date] * decline.loc[date]
+    return simulated_data
 
 def main():
     st.markdown("""
@@ -205,7 +185,6 @@ def main():
     monthly_prices_styled = monthly_prices.style.format("{:.2f}").applymap(lambda x: 'color: #90ee90;' if x >= 0 else 'color: #ff4d4d;')
     st.dataframe(monthly_prices_styled.set_caption("Monthly Prices"))
 
-    
     st.subheader('Monthly Prices Visualization')
     fig, ax = plt.subplots(figsize=(14, 7))
     plt.style.use('dark_background')
@@ -218,10 +197,21 @@ def main():
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
 
-  
-
     st.subheader(f'Monthly Allocation Breakdown ({strategy})')
-    plot_monthly_allocation(monthly_prices, weights, top_cryptos[:3])
+    monthly_returns = monthly_prices.pct_change(fill_method=None).dropna()
+    monthly_allocations = (monthly_returns + 1).cumprod() * weights * monthly_prices.iloc[0]
+
+    # Apply the cap to monthly allocations
+    monthly_allocations = monthly_allocations.apply(lambda x: enforce_cap(x, 0.25), axis=1)
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+    monthly_allocations.plot(kind='bar', stacked=True, ax=ax, alpha=0.8)
+    ax.set_title('Monthly Crypto Allocation Breakdown')
+    ax.set_xlabel('Month')
+    ax.set_ylabel('Value in %')
+    ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
+    ax.grid(True, linestyle='--', alpha=0.5)
+    st.pyplot(fig)
 
     expander = st.expander("View Detailed Price Charts")
     with expander:
