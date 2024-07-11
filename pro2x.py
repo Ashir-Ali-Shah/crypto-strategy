@@ -107,6 +107,7 @@ def main():
     ])
     cap = st.number_input("Capped Percentage (for Capped Strategy)", value=25, min_value=0, max_value=100)
     initial_investment = st.number_input("Initial Investment (USD)", value=10000, min_value=1)
+    quarter = st.selectbox("Select Quarter", options=['Q1', 'Q2', 'Q3', 'Q4'])
 
     start_date = datetime(year, 1, 1)
     end_date = datetime(year, 12, 31)
@@ -124,8 +125,20 @@ def main():
             average_volumes[crypto] = data['Volume'].mean()
             price_changes[crypto] = ((data['Adj Close'][-1] - data['Adj Close'][0]) / data['Adj Close'][0]) * 100
 
+    def get_quarter_dates(quarter, year):
+        if quarter == 'Q1':
+            return datetime(year, 1, 1), datetime(year, 3, 31)
+        elif quarter == 'Q2':
+            return datetime(year, 4, 1), datetime(year, 6, 30)
+        elif quarter == 'Q3':
+            return datetime(year, 7, 1), datetime(year, 9, 30)
+        else:
+            return datetime(year, 10, 1), datetime(year, 12, 31)
+
+    quarter_start, quarter_end = get_quarter_dates(quarter, year)
+
     top_cryptos = sorted(average_volumes, key=average_volumes.get, reverse=True)[:15]
-    top_cryptos_data = {crypto: crypto_data[crypto] for crypto in top_cryptos}
+    top_cryptos_data = {crypto: crypto_data[crypto].loc[quarter_start:quarter_end] for crypto in top_cryptos}
     prices = pd.DataFrame({crypto: data['Adj Close'] for crypto, data in top_cryptos_data.items()})
 
     if year == 2022:
@@ -138,7 +151,7 @@ def main():
     else:
         weights = top_15_by_volume(prices)
 
-    st.subheader(f'Top 15 Coins and Their Weightage ({strategy})')
+    st.subheader(f'Top 15 Coins and Their Weightage ({strategy}) for {quarter}')
     top_coins_df = pd.DataFrame({
         'Coin': weights.index,
         'Weightage (%)': (weights.values * 100).round(2),
@@ -154,25 +167,25 @@ def main():
     st.dataframe(top_coins_df.style
         .applymap(style_weightage, subset=['Weightage (%)'])
         .applymap(style_usd, subset=['Latest Price (USD)'])
-        .set_caption("Top 15 Coins and Their Weightage"))
+        .set_caption(f"Top 15 Coins and Their Weightage for {quarter}"))
 
     st.subheader('Top 15 Coins Weightage Visualization')
     fig, ax = plt.subplots()
     plt.style.use('dark_background')
     ax.barh(top_coins_df['Coin'], top_coins_df['Weightage (%)'], color='#90ee90', alpha=0.8)
     ax.set_xlabel('Weightage (%)')
-    ax.set_title('Top 15 Coins and Their Weightage')
+    ax.set_title(f'Top 15 Coins and Their Weightage for {quarter}')
     st.pyplot(fig)
 
-    monthly_prices = prices.resample('ME').ffill()
+    monthly_prices = prices.resample('M').ffill()
 
-    st.subheader(f'Portfolio Value Over Time ({strategy})')
+    st.subheader(f'Portfolio Value Over Time ({strategy}) for {quarter}')
     portfolio_value, weighted_returns = calculate_portfolio_value(prices, weights, initial_investment)
     allocation_percentage = portfolio_value / initial_investment * 100
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(14, 7))
     ax.plot(allocation_percentage.index, allocation_percentage, label='Portfolio Allocation (%)', color='#90ee90', alpha=0.8)
-    ax.set_title(f'Portfolio Allocation Over Time ({strategy})')
+    ax.set_title(f'Portfolio Allocation Over Time ({strategy}) for {quarter}')
     ax.set_xlabel('Date')
     ax.set_ylabel('Portfolio Allocation (%)')
     ax.set_xticks(allocation_percentage.index[::30])
@@ -181,34 +194,38 @@ def main():
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
 
-    st.subheader(f'Monthly Prices for Top 15 Coins ({strategy})')
+    st.subheader(f'Monthly Prices for Top 15 Coins ({strategy}) for {quarter}')
     monthly_prices_styled = monthly_prices.style.format("{:.2f}").applymap(lambda x: 'color: #90ee90;' if x >= 0 else 'color: #ff4d4d;')
-    st.dataframe(monthly_prices_styled.set_caption("Monthly Prices"))
+    st.dataframe(monthly_prices_styled.set_caption(f"Monthly Prices for {quarter}"))
 
     st.subheader('Monthly Prices Visualization')
     fig, ax = plt.subplots(figsize=(14, 7))
     plt.style.use('dark_background')
     for crypto in top_cryptos:
         ax.plot(monthly_prices.index, monthly_prices[crypto], label=crypto)
-    ax.set_title('Monthly Prices for Top 15 Coins')
+    ax.set_title(f'Monthly Prices for Top 15 Coins for {quarter}')
     ax.set_xlabel('Date')
     ax.set_ylabel('Price (USD)')
     ax.legend(loc='upper left', bbox_to_anchor=(1, 1))
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
 
-    st.subheader(f'Monthly Allocation Breakdown ({strategy})')
-    monthly_returns = monthly_prices.pct_change(fill_method=None).dropna()
-    monthly_allocations = (monthly_returns + 1).cumprod() * weights * monthly_prices.iloc[0]
+    # Preparing the data for the monthly allocation breakdown with bars for each month in the quarter
+    def prepare_monthly_allocation(prices, weights, initial_investment):
+        monthly_returns = prices.pct_change().dropna()
+        cumulative_returns = (monthly_returns + 1).cumprod()
+        weighted_cumulative_returns = cumulative_returns.mul(weights, axis=1)
+        monthly_allocations = weighted_cumulative_returns.mul(initial_investment).resample('M').last()
+        return monthly_allocations
 
-    # Apply the cap to monthly allocations
-    monthly_allocations = monthly_allocations.apply(lambda x: enforce_cap(x, 0.25), axis=1)
+    monthly_allocations = prepare_monthly_allocation(prices.loc[quarter_start:quarter_end], weights, initial_investment)
 
+    st.subheader(f'Monthly Allocation Breakdown ({strategy}) for {quarter}')
     fig, ax = plt.subplots(figsize=(14, 7))
     monthly_allocations.plot(kind='bar', stacked=True, ax=ax, alpha=0.8)
-    ax.set_title('Monthly Crypto Allocation Breakdown')
+    ax.set_title(f'Monthly Crypto Allocation Breakdown for {quarter}')
     ax.set_xlabel('Month')
-    ax.set_ylabel('Value in %')
+    ax.set_ylabel('Value in USD')
     ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1))
     ax.grid(True, linestyle='--', alpha=0.5)
     st.pyplot(fig)
@@ -222,7 +239,7 @@ def main():
                 fig, ax = plt.subplots()
                 plt.style.use('dark_background')
                 ax.plot(top_cryptos_data[crypto]['Adj Close'], label=f'{crypto} Adjusted Close', color='#add8e6', alpha=0.8)
-                ax.set_title(f"{crypto} Adjusted Close Price in {year}")
+                ax.set_title(f"{crypto} Adjusted Close Price in {year} ({quarter})")
                 ax.set_xlabel("Date")
                 ax.set_ylabel("Adjusted Close Price (USD)")
                 ax.legend()
