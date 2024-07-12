@@ -50,15 +50,15 @@ def enforce_cap(weights, cap):
         weights = adjusted_weights / adjusted_weights.sum()
     return weights
 
-def market_cap_weighted(prices):
+def market_cap_weighted(prices, cap_percentage):
     weights = pd.Series(0, index=prices.columns)
     total_market_cap = prices.iloc[-1].sum()
     for crypto in prices.columns:
         weights[crypto] = prices[crypto].iloc[-1] / total_market_cap
-    return enforce_cap(weights, 0.25)
+    return enforce_cap(weights, cap_percentage / 100)
 
 def capped_market_cap_weighted(prices, cap_percentage):
-    weights = market_cap_weighted(prices)
+    weights = market_cap_weighted(prices, cap_percentage)
     return enforce_cap(weights, cap_percentage / 100)
 
 def top_15_by_volume(prices):
@@ -105,7 +105,7 @@ def main():
         'Capped Market Cap Weighted', 
         'Top 15 by Volume'
     ])
-    cap = st.number_input("Capped Percentage (for Capped Strategy)", value=25, min_value=0, max_value=100)
+    cap = st.slider("Capped Percentage (for Capped Strategy)", value=25, min_value=0, max_value=100)
     initial_investment = st.number_input("Initial Investment (USD)", value=10000, min_value=1)
     quarter = st.selectbox("Select Quarter", options=['Q1', 'Q2', 'Q3', 'Q4'])
 
@@ -145,7 +145,7 @@ def main():
         prices = simulate_decline(prices, 2022)
 
     if strategy == 'Market Cap Weighted':
-        weights = market_cap_weighted(prices)
+        weights = market_cap_weighted(prices, cap)
     elif strategy == 'Capped Market Cap Weighted':
         weights = capped_market_cap_weighted(prices, cap)
     else:
