@@ -44,6 +44,19 @@ def fetch_market_caps(cryptos):
             print(f"Error fetching market cap for {crypto}: {e}")
     return market_caps
 
+def calculate_portfolio_value(data, weights, initial_investment):
+    daily_returns = data.pct_change(fill_method=None).dropna()
+    weighted_returns = daily_returns.dot(weights)
+    cumulative_returns = (1 + weighted_returns).cumprod()
+    portfolio_value = cumulative_returns * initial_investment
+    
+    # Calculate the number of tokens held and value based on holdings
+    initial_prices = data.iloc[0]
+    tokens_held = (weights * initial_investment) / initial_prices
+    portfolio_values_based_on_holdings = (tokens_held * data).sum(axis=1)
+    
+    return portfolio_value, weighted_returns, portfolio_values_based_on_holdings
+
 def enforce_cap(weights, cap):
     while weights.max() > cap:
         excess = weights[weights > cap] - cap
@@ -59,8 +72,7 @@ def market_cap_weighted(prices, market_caps, cap_percentage):
     weights = pd.Series(0, index=prices.columns)
     total_market_cap = sum(market_caps.values())
     for crypto in prices.columns:
-        if crypto in market_caps:
-            weights[crypto] = market_caps[crypto] / total_market_cap
+        weights[crypto] = market_caps[crypto] / total_market_cap
     return enforce_cap(weights, cap_percentage / 100)
 
 def capped_market_cap_weighted(prices, market_caps, cap_percentage):
@@ -86,63 +98,6 @@ def simulate_decline(data, year):
             simulated_data.loc[date] = simulated_data.loc[date] * decline.loc[date]
     return simulated_data
 
-def get_quarter_dates(quarter, year):
-    if quarter == 'Q1':
-        return datetime(year, 1, 1), datetime(year, 3, 31)
-    elif quarter == 'Q2':
-        return datetime(year, 4, 1), datetime(year, 6, 30)
-    elif quarter == 'Q3':
-        return datetime(year, 7, 1), datetime(year, 9, 30)
-    else:
-        return datetime(year, 10, 1), datetime(year, 12, 31)
-
-def calculate_quarterly_weights(crypto_data, market_caps, strategy, cap, year):
-    quarter_dates = [get_quarter_dates(q, year) for q in ['Q1', 'Q2', 'Q3', 'Q4']]
-    quarterly_weights = {}
-    for q_start, q_end in quarter_dates:
-        quarter_prices = pd.DataFrame({crypto: data['Adj Close'] for crypto, data in crypto_data.items()}).loc[q_start:q_end]
-        if strategy == 'Market Cap Weighted':
-            weights = market_cap_weighted(quarter_prices, market_caps, cap)
-        elif strategy == 'Capped Market Cap Weighted':
-            weights = capped_market_cap_weighted(quarter_prices, market_caps, cap)
-        else:
-            weights = top_15_by_volume(quarter_prices)
-        quarterly_weights[q_start] = weights
-    return quarterly_weights
-
-def calculate_portfolio_value(data, weights, initial_investment):
-    # Filter weights to include only cryptocurrencies present in the data
-    weights = weights[weights.index.isin(data.columns)]
-    # Ensure the columns of data align with the index of weights
-    aligned_data = data[weights.index]
-    if aligned_data.empty:
-        return pd.Series(dtype='float64'), pd.Series(dtype='float64'), pd.Series(dtype='float64'), pd.Series(dtype='float64')
-    daily_returns = aligned_data.pct_change(fill_method=None).dropna()
-    weighted_returns = daily_returns.dot(weights)
-    cumulative_returns = (1 + weighted_returns).cumprod()
-    portfolio_value = cumulative_returns * initial_investment
-    
-    # Calculate the number of tokens held and value based on holdings
-    initial_prices = aligned_data.iloc[0]
-    tokens_held = (weights * initial_investment) / initial_prices
-    portfolio_values_based_on_holdings = (tokens_held * aligned_data).sum(axis=1)
-    
-    return portfolio_value, weighted_returns, portfolio_values_based_on_holdings, tokens_held
-
-def calculate_portfolio_value_over_time(prices, quarterly_weights, initial_investment):
-    portfolio_values = []
-    for start_date, weights in quarterly_weights.items():
-        weights = weights[weights.index.isin(prices.columns)]
-        quarter_prices = prices[weights.index].loc[start_date:]
-        portfolio_value, _, portfolio_values_based_on_holdings, tokens_held = calculate_portfolio_value(quarter_prices, weights, initial_investment)
-        if not portfolio_values_based_on_holdings.empty:
-            portfolio_values.append(portfolio_values_based_on_holdings)
-            initial_investment = portfolio_values_based_on_holdings.iloc[-1]  # Update initial investment for the next quarter
-    if portfolio_values:
-        return pd.concat(portfolio_values).groupby(level=0).last()
-    else:
-        return pd.Series(dtype='float64')
-
 def main():
     st.markdown("""
         <style>
@@ -161,14 +116,19 @@ def main():
 
     st.markdown("<h1 class='center-text fade-in'>Crypto Portfolio Analyzer</h1>", unsafe_allow_html=True)
     st.markdown("<h2 class='center-text fade-in'>Analyze and optimize your cryptocurrency portfolio with various strategies based on trading volumes and market capitalization.</h2>", unsafe_allow_html=True)
-    year = st.selectbox("Select Year", options=[2023, 2022, 2021], index=0)
-    strategy = st.selectbox("Select Portfolio Strategy", options=[
-        'Market Cap Weighted', 
-        'Capped Market Cap Weighted', 
-        'Top 15 by Volume'
-    ])
-    cap = st.slider("Capped Percentage (for Capped Strategy)", value=25, min_value=0, max_value=100)
-    initial_investment = st.number_input("Initial Investment (USD)", value=10000, min_value=1)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        year = st.selectbox("Select Year", options=[2023, 2022, 2021], index=0)
+        strategy = st.selectbox("Select Portfolio Strategy", options=[
+            'Market Cap Weighted', 
+            'Capped Market Cap Weighted', 
+            'Top 15 by Volume'
+        ])
+    with col2:
+        cap = st.slider("Capped Percentage (for Capped Strategy)", value=25, min_value=0, max_value=100)
+        initial_investment = st.number_input("Initial Investment (USD)", value=10000, min_value=1)
+    
     view_option = st.selectbox("View Option", options=['Annual', 'Quarterly'])
     if view_option == 'Quarterly':
         quarter = st.selectbox("Select Quarter", options=['Q1', 'Q2', 'Q3', 'Q4'])
@@ -183,7 +143,7 @@ def main():
             return
 
     market_caps = fetch_market_caps(cryptos)
-
+    
     average_volumes = {}
     price_changes = {}
     for crypto, data in crypto_data.items():
@@ -191,38 +151,56 @@ def main():
             average_volumes[crypto] = data['Volume'].mean()
             price_changes[crypto] = ((data['Adj Close'][-1] - data['Adj Close'][0]) / data['Adj Close'][0]) * 100
 
+    def get_quarter_dates(quarter, year):
+        if quarter == 'Q1':
+            return datetime(year, 1, 1), datetime(year, 3, 31)
+        elif quarter == 'Q2':
+            return datetime(year, 4, 1), datetime(year, 6, 30)
+        elif quarter == 'Q3':
+            return datetime(year, 7, 1), datetime(year, 9, 30)
+        else:
+            return datetime(year, 10, 1), datetime(year, 12, 31)
+
     if view_option == 'Quarterly':
         quarter_start, quarter_end = get_quarter_dates(quarter, year)
         top_cryptos = sorted(average_volumes, key=average_volumes.get, reverse=True)[:15]
         top_cryptos_data = {crypto: crypto_data[crypto].loc[quarter_start:quarter_end] for crypto in top_cryptos}
         prices = pd.DataFrame({crypto: data['Adj Close'] for crypto, data in top_cryptos_data.items()})
-        quarterly_weights = calculate_quarterly_weights(crypto_data, market_caps, strategy, cap, year)
-        portfolio_values_based_on_holdings = calculate_portfolio_value_over_time(prices, quarterly_weights, initial_investment)
-        # Set weights to the latest quarter's weights for displaying in the table
-        weights = list(quarterly_weights.values())[-1]
     else:
         top_cryptos = sorted(average_volumes, key=average_volumes.get, reverse=True)[:15]
         top_cryptos_data = {crypto: crypto_data[crypto] for crypto in top_cryptos}
         prices = pd.DataFrame({crypto: data['Adj Close'] for crypto, data in top_cryptos_data.items()})
+
+    if year == 2022:
+        prices = simulate_decline(prices, 2022)
+
+    # Recalculate weights quarterly
+    if view_option == 'Quarterly':
+        quarter_dates = [get_quarter_dates(q, year) for q in ['Q1', 'Q2', 'Q3', 'Q4']]
+        quarterly_weights = []
+        for q_start, q_end in quarter_dates:
+            quarter_prices = prices.loc[q_start:q_end]
+            if strategy == 'Market Cap Weighted':
+                weights = market_cap_weighted(quarter_prices, market_caps, cap)
+            elif strategy == 'Capped Market Cap Weighted':
+                weights = capped_market_cap_weighted(quarter_prices, market_caps, cap)
+            else:
+                weights = top_15_by_volume(quarter_prices)
+            quarterly_weights.append(weights)
+    else:
         if strategy == 'Market Cap Weighted':
             weights = market_cap_weighted(prices, market_caps, cap)
         elif strategy == 'Capped Market Cap Weighted':
             weights = capped_market_cap_weighted(prices, market_caps, cap)
         else:
             weights = top_15_by_volume(prices)
-        portfolio_value, _, portfolio_values_based_on_holdings, tokens_held = calculate_portfolio_value(prices, weights, initial_investment)
 
     view_period = f'{quarter} {year}' if view_option == 'Quarterly' else f'{year}'
-
-    # Ensure that the lengths of weights, prices, and market_caps match
-    weights = weights[weights.index.isin(prices.columns)]
-    market_caps = {crypto: market_caps[crypto] for crypto in weights.index}
-
     st.subheader(f'Top 15 Coins and Their Weightage ({strategy}) for {view_period}')
     top_coins_df = pd.DataFrame({
         'Coin': weights.index,
         'Weightage (%)': (weights.values * 100).round(2),
-        'Latest Price (USD)': prices[weights.index].iloc[-1].values.round(2),
+        'Latest Price (USD)': prices.iloc[-1].values.round(2),
         'Market Cap (USD)': [market_caps.get(crypto, 0) for crypto in weights.index]
     }).reset_index(drop=True)
 
@@ -248,10 +226,13 @@ def main():
     monthly_prices = prices.resample('M').ffill()
 
     st.subheader(f'Portfolio Value Over Time ({strategy}) for {view_period}')
-    allocation_percentage = portfolio_values_based_on_holdings / initial_investment * 100
+    portfolio_value, weighted_returns, portfolio_values_based_on_holdings = calculate_portfolio_value(prices, weights, initial_investment)
+    allocation_percentage = portfolio_value / initial_investment * 100
+    holdings_allocation_percentage = portfolio_values_based_on_holdings / initial_investment * 100
     plt.style.use('dark_background')
     fig, ax = plt.subplots(figsize=(14, 7))
     ax.plot(allocation_percentage.index, allocation_percentage, label='Portfolio Allocation (%)', color='#90ee90', alpha=0.8)
+    ax.plot(holdings_allocation_percentage.index, holdings_allocation_percentage, label='Holdings Allocation (%)', color='#1f77b4', alpha=0.8)
     ax.set_title(f'Portfolio Allocation Over Time ({strategy}) for {view_period}')
     ax.set_xlabel('Date')
     ax.set_ylabel('Portfolio Allocation (%)')
