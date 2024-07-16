@@ -204,6 +204,8 @@ def main():
         'Market Cap (USD)': [market_caps.get(crypto, 0) for crypto in weights.index]
     }).reset_index(drop=True)
 
+    top_coins_df = top_coins_df.sort_values(by='Market Cap (USD)', ascending=False).reset_index(drop=True)
+
     def style_weightage(val):
         return 'color: #90ee90; font-weight: bold;' if isinstance(val, (int, float)) else ''
 
